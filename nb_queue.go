@@ -5,19 +5,19 @@ import (
 	"unsafe"
 )
 
-type Pointer struct {
-	ptr   *Node
+type Pointer[T any] struct {
+	ptr   *Node[T]
 	count uint32
 }
 
-type Node struct {
-	value int
-	next  Pointer
+type Node[T any] struct {
+	value T
+	next  Pointer[T]
 }
 
-func NewNode() *Node {
-	return &Node{
-		next: Pointer{
+func NewNode[T any]() *Node[T] {
+	return &Node[T]{
+		next: Pointer[T]{
 			ptr:   nil,
 			count: 0,
 		},
@@ -27,33 +27,33 @@ func NewNode() *Node {
 /*
 * NBQueue is a Concurent Non-Blocking Queue based on CAS primitives
  */
-type NBQueue struct {
-	Head Pointer
-	Tail Pointer
+type NBQueue[T any] struct {
+	Head Pointer[T]
+	Tail Pointer[T]
 }
 
-func NewQueue() Queue {
-	var node *Node = NewNode()
+func NewQueue[T any]() Queue[T] {
+	var node *Node[T] = NewNode[T]()
 
-	return &NBQueue{
-		Head: Pointer{
+	return &NBQueue[T]{
+		Head: Pointer[T]{
 			ptr:   node,
 			count: 0,
 		},
-		Tail: Pointer{
+		Tail: Pointer[T]{
 			ptr:   node,
 			count: 0,
 		},
 	}
 }
 
-func (Q *NBQueue) Enqueue(value int) {
+func (Q *NBQueue[T]) Enqueue(value T) {
 	// creating a new node with value to enqueue
-	var node *Node = NewNode()
+	var node *Node[T] = NewNode[T]()
 	node.value = value
 	node.next.ptr = nil
 
-	var tail Pointer
+	var tail Pointer[T]
 	// since CAS-ing can fail, we keep trying until we succeed to enqueue `node`
 	for {
 		// save the current tail
@@ -89,8 +89,8 @@ func (Q *NBQueue) Enqueue(value int) {
 		unsafe.Pointer(node))
 }
 
-func (Q *NBQueue) Dequeue() (value int, status bool) {
-	var head Pointer // saving current head (which will be dequeued), which allows us to free the node data
+func (Q *NBQueue[T]) Dequeue() (value T, status bool) {
+	var head Pointer[T] // saving current head (which will be dequeued), which allows us to free the node data
 
 	// since CAS-ing can fail (on account that nodes are concurrently dequeued), we must keep trying
 	for {

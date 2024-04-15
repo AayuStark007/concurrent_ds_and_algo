@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	Q := NewQueue()
+	Q := NewQueue[interface{}]()
 
 	var wg sync.WaitGroup
 
@@ -14,9 +14,9 @@ func main() {
 	go func() {
 		defer wg.Done()
 
-		Q.Enqueue(1)
+		Q.Enqueue(NewNode[int]())
 		Q.Enqueue(2)
-		Q.Enqueue(3)
+		Q.Enqueue("ef")
 		Q.Enqueue(4)
 		Q.Enqueue(5)
 	}()
