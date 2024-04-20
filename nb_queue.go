@@ -5,77 +5,77 @@ import (
 	"unsafe"
 )
 
-type Pointer[T any] struct {
-	ptr   *Node[T]
-	count uint32
+/*
+* Node -> good'ol linked list node with data and next ptr
+* According to notes from Java's implementation of ConcurrentLinkedQueue:
+* > This implementation relies on the fact that in garbage collected systems,
+* > there is no possibility of ABA problems due to recycled nodes,
+* > so there is no need to use "counted pointers" or related techniques
+*
+* Need to understand this further but in a nutshell, counters as given in the paper impl are not required here.
+ */
+type Node[E any] struct {
+	item E
+	next *Node[E]
 }
 
-type Node[T any] struct {
-	value T
-	next  Pointer[T]
+func NewNode[E any]() *Node[E] {
+	return &Node[E]{
+		next: nil,
+	}
 }
 
-func NewNode[T any]() *Node[T] {
-	return &Node[T]{
-		next: Pointer[T]{
-			ptr:   nil,
-			count: 0,
-		},
+func NewNodeWithItem[E any](item E) *Node[E] {
+	return &Node[E]{
+		item: item,
+		next: nil,
 	}
 }
 
 /*
 * NBQueue is a Concurent Non-Blocking Queue based on CAS primitives
  */
-type NBQueue[T any] struct {
-	Head Pointer[T]
-	Tail Pointer[T]
+type NBQueue[E any] struct {
+	Head *Node[E]
+	Tail *Node[E]
 }
 
-func NewQueue[T any]() Queue[T] {
-	var node *Node[T] = NewNode[T]()
+func NewQueue[E any]() Queue[E] {
+	node := NewNode[E]()
 
-	return &NBQueue[T]{
-		Head: Pointer[T]{
-			ptr:   node,
-			count: 0,
-		},
-		Tail: Pointer[T]{
-			ptr:   node,
-			count: 0,
-		},
+	return &NBQueue[E]{
+		Head: node,
+		Tail: node,
 	}
 }
 
-func (Q *NBQueue[T]) Enqueue(value T) {
+func (Q *NBQueue[E]) Enqueue(item E) {
 	// creating a new node with value to enqueue
-	var node *Node[T] = NewNode[T]()
-	node.value = value
-	node.next.ptr = nil
+	node := NewNodeWithItem[E](item)
 
-	var tail Pointer[T]
+	var tail *Node[E]
 	// since CAS-ing can fail, we keep trying until we succeed to enqueue `node`
 	for {
 		// save the current tail
 		tail = Q.Tail
 		// save the next node to tail
-		next := tail.ptr.next
+		next := tail.next
 
 		// ensure our saved tail is still the Tail
 		if tail == Q.Tail {
 			// wrt tail -> either we are at the last node or our tail is lagging and we need to advance it further
-			if next.ptr == nil { // tail is pointing to the last node
+			if next == nil { // tail is pointing to the last node
 				if atomic.CompareAndSwapPointer((*unsafe.Pointer)(
-					unsafe.Pointer(&tail.ptr.next.ptr)),
-					unsafe.Pointer(next.ptr),
+					unsafe.Pointer(&tail.next)),
+					unsafe.Pointer(next),
 					unsafe.Pointer(node)) {
 					break // successfully enqueued
 				}
 			} else { // tail not pointing to the last node (some concurrent process enqueued more nodes after we read the tail earlier)
 				atomic.CompareAndSwapPointer(
-					(*unsafe.Pointer)(unsafe.Pointer(&Q.Tail.ptr)),
-					unsafe.Pointer(tail.ptr),
-					unsafe.Pointer(next.ptr)) // try to move the tail to newly inserted node
+					(*unsafe.Pointer)(unsafe.Pointer(&Q.Tail)),
+					unsafe.Pointer(tail),
+					unsafe.Pointer(next)) // try to move the tail to newly inserted node
 			}
 		}
 	}
@@ -84,13 +84,13 @@ func (Q *NBQueue[T]) Enqueue(value T) {
 		But, its not a necessary thing to do, which allows enquques to be fast as we can allow the Q.Tail to lag.
 	*/
 	atomic.CompareAndSwapPointer(
-		(*unsafe.Pointer)(unsafe.Pointer(&Q.Tail.ptr)),
-		unsafe.Pointer(tail.ptr),
+		(*unsafe.Pointer)(unsafe.Pointer(&Q.Tail)),
+		unsafe.Pointer(tail),
 		unsafe.Pointer(node))
 }
 
-func (Q *NBQueue[T]) Dequeue() (value T, status bool) {
-	var head Pointer[T] // saving current head (which will be dequeued), which allows us to free the node data
+func (Q *NBQueue[E]) Dequeue() (item E, ok bool) {
+	var head *Node[E] // saving current head (which will be dequeued), which allows us to free the node data
 
 	// since CAS-ing can fail (on account that nodes are concurrently dequeued), we must keep trying
 	for {
@@ -98,38 +98,38 @@ func (Q *NBQueue[T]) Dequeue() (value T, status bool) {
 		// read the current tail, required for checking empty Queue case
 		tail := Q.Tail
 		// next ptr to head (will become the new head later)
-		next := head.ptr.next
+		next := head.next
 
 		// ensure that our saved head is still the Head
 		if head == Q.Head {
 			// either Q is empty, or the tail might be lagging (on account of more items enqueued since we started)
-			if head.ptr == tail.ptr {
+			if head == tail {
 				// this means tail is pointing to the last node, so our Q is empty
-				if next.ptr == nil {
-					status = false
+				if next == nil {
+					ok = false
 					return
 				}
 				// advance the tail, in case it is lagging
 				atomic.CompareAndSwapPointer(
-					(*unsafe.Pointer)(unsafe.Pointer(&Q.Tail.ptr)),
-					unsafe.Pointer(tail.ptr),
-					unsafe.Pointer(next.ptr),
+					(*unsafe.Pointer)(unsafe.Pointer(&Q.Tail)),
+					unsafe.Pointer(tail),
+					unsafe.Pointer(next),
 				)
 			} else {
 				// read the value
-				value = next.ptr.value
+				item = next.item
 
 				// try to advance the head to the next node, this is a required condition for dequeue to succeed
 				if atomic.CompareAndSwapPointer(
-					(*unsafe.Pointer)(unsafe.Pointer(&Q.Head.ptr)),
-					unsafe.Pointer(head.ptr),
-					unsafe.Pointer(next.ptr),
+					(*unsafe.Pointer)(unsafe.Pointer(&Q.Head)),
+					unsafe.Pointer(head),
+					unsafe.Pointer(next),
 				) {
 					break
 				}
 			}
 		}
 	}
-	head.ptr = head.ptr // make old head node as pointing to itself so that it can be GC'd
-	return value, true
+	head.next = head // make old head node as pointing to itself so that it can be GC'd
+	return item, true
 }
