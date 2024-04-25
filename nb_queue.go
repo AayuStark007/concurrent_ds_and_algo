@@ -65,17 +65,11 @@ func (Q *NBQueue[E]) Enqueue(item E) {
 		if tail == Q.Tail {
 			// wrt tail -> either we are at the last node or our tail is lagging and we need to advance it further
 			if next == nil { // tail is pointing to the last node
-				if atomic.CompareAndSwapPointer((*unsafe.Pointer)(
-					unsafe.Pointer(&tail.next)),
-					unsafe.Pointer(next),
-					unsafe.Pointer(node)) {
+				if casNodePtr(&tail.next, next, node) {
 					break // successfully enqueued
 				}
 			} else { // tail not pointing to the last node (some concurrent process enqueued more nodes after we read the tail earlier)
-				atomic.CompareAndSwapPointer(
-					(*unsafe.Pointer)(unsafe.Pointer(&Q.Tail)),
-					unsafe.Pointer(tail),
-					unsafe.Pointer(next)) // try to move the tail to newly inserted node
+				casNodePtr(&Q.Tail, tail, next) // try to move the tail to newly inserted node
 			}
 		}
 	}
@@ -83,10 +77,7 @@ func (Q *NBQueue[E]) Enqueue(item E) {
 		We have enqueued the node, we can now try to ensure Q.Tail is pointing to newly inserted node.
 		But, its not a necessary thing to do, which allows enquques to be fast as we can allow the Q.Tail to lag.
 	*/
-	atomic.CompareAndSwapPointer(
-		(*unsafe.Pointer)(unsafe.Pointer(&Q.Tail)),
-		unsafe.Pointer(tail),
-		unsafe.Pointer(node))
+	casNodePtr(&Q.Tail, tail, node)
 }
 
 func (Q *NBQueue[E]) Dequeue() (item E, ok bool) {
@@ -110,21 +101,13 @@ func (Q *NBQueue[E]) Dequeue() (item E, ok bool) {
 					return
 				}
 				// advance the tail, in case it is lagging
-				atomic.CompareAndSwapPointer(
-					(*unsafe.Pointer)(unsafe.Pointer(&Q.Tail)),
-					unsafe.Pointer(tail),
-					unsafe.Pointer(next),
-				)
+				casNodePtr(&Q.Tail, tail, next)
 			} else {
 				// read the value
 				item = next.item
 
 				// try to advance the head to the next node, this is a required condition for dequeue to succeed
-				if atomic.CompareAndSwapPointer(
-					(*unsafe.Pointer)(unsafe.Pointer(&Q.Head)),
-					unsafe.Pointer(head),
-					unsafe.Pointer(next),
-				) {
+				if casNodePtr(&Q.Head, head, next) {
 					break
 				}
 			}
@@ -132,4 +115,13 @@ func (Q *NBQueue[E]) Dequeue() (item E, ok bool) {
 	}
 	head.next = head // make old head node as pointing to itself so that it can be GC'd
 	return item, true
+}
+
+// convenience wrapper over the atomic CAS which hides the dirty work
+func casNodePtr[E any](addr **Node[E], old *Node[E], new *Node[E]) (swapped bool) {
+	return atomic.CompareAndSwapPointer(
+		(*unsafe.Pointer)(unsafe.Pointer(addr)),
+		unsafe.Pointer(old),
+		unsafe.Pointer(new),
+	)
 }
