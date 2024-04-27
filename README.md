@@ -21,5 +21,22 @@ The paper describes the following two Concurrent Queue Algorithms:
 
 - **Go Generics**: I have tried to define the contracts of this algorithm which allow it to leverage the Golang generics, thus the implementations can work with any data type in a type-safe manner.
 
+#### Examples
+Some examples utilising our Concurrent Queue implementation:
+- **Channels**: Simulating a Sender and Receiver channels to distribute work via messages to multiple worker threads and collecting the results.
+    
+    Usage:
+        
+        ## build
+        cd examples/channels
+        go build .
+        
+        ## run with non-blocking queue channel
+        ./channel
+
+        ## run with 2-lock blocking channel
+        ./channel -blocking
+ 
+
 #### Benchmarks
  *coming soon*
