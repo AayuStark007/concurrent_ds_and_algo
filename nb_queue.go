@@ -51,7 +51,7 @@ func NewQueue[E any]() Queue[E] {
 
 func (Q *NBQueue[E]) Enqueue(item E) {
 	// creating a new node with value to enqueue
-	node := NewNodeWithItem[E](item)
+	newNode := NewNodeWithItem[E](item)
 
 	var tail *Node[E]
 	// since CAS-ing can fail, we keep trying until we succeed to enqueue `node`
@@ -65,7 +65,7 @@ func (Q *NBQueue[E]) Enqueue(item E) {
 		if tail == Q.Tail {
 			// wrt tail -> either we are at the last node or our tail is lagging and we need to advance it further
 			if next == nil { // tail is pointing to the last node
-				if casNodePtr(&tail.next, next, node) {
+				if casNodePtr(&tail.next, nil, newNode) {
 					break // successfully enqueued
 				}
 			} else { // tail not pointing to the last node (some concurrent process enqueued more nodes after we read the tail earlier)
@@ -77,7 +77,7 @@ func (Q *NBQueue[E]) Enqueue(item E) {
 		We have enqueued the node, we can now try to ensure Q.Tail is pointing to newly inserted node.
 		But, its not a necessary thing to do, which allows enquques to be fast as we can allow the Q.Tail to lag.
 	*/
-	casNodePtr(&Q.Tail, tail, node)
+	casNodePtr(&Q.Tail, tail, newNode)
 }
 
 func (Q *NBQueue[E]) Dequeue() (item E, ok bool) {
