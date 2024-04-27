@@ -33,23 +33,24 @@ func NewNodeWithItem[E any](item E) *Node[E] {
 }
 
 /*
-* NBQueue is a Concurent Non-Blocking Queue based on CAS primitives
+* NonBlockingQueue is a Concurent Non-Blocking Queue based on CAS primitives
  */
-type NBQueue[E any] struct {
+type NonBlockingQueue[E any] struct {
 	Head *Node[E]
 	Tail *Node[E]
 }
 
-func NewQueue[E any]() Queue[E] {
+func NewNonBlockingQueue[E any]() Queue[E] {
+	// create dummy node so that we don't have to handle edge cases for empty queue case
 	node := NewNode[E]()
 
-	return &NBQueue[E]{
+	return &NonBlockingQueue[E]{
 		Head: node,
 		Tail: node,
 	}
 }
 
-func (Q *NBQueue[E]) Enqueue(item E) {
+func (Q *NonBlockingQueue[E]) Enqueue(item E) {
 	// creating a new node with value to enqueue
 	newNode := NewNodeWithItem[E](item)
 
@@ -80,7 +81,7 @@ func (Q *NBQueue[E]) Enqueue(item E) {
 	casNodePtr(&Q.Tail, tail, newNode)
 }
 
-func (Q *NBQueue[E]) Dequeue() (item E, ok bool) {
+func (Q *NonBlockingQueue[E]) Dequeue() (item E, ok bool) {
 	var head *Node[E] // saving current head (which will be dequeued), which allows us to free the node data
 
 	// since CAS-ing can fail (on account that nodes are concurrently dequeued), we must keep trying

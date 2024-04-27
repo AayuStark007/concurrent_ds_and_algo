@@ -6,7 +6,8 @@ import (
 )
 
 func main() {
-	Q := NewQueue[interface{}]()
+	// Q := NewNonBlockingQueue[interface{}]()
+	Q := NewBlockingQueue[interface{}]()
 
 	var wg sync.WaitGroup
 
