@@ -1,4 +1,4 @@
-package main
+package queue
 
 type Queue[T any] interface {
 	Enqueue(value T)

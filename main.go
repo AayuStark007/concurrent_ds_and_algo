@@ -3,11 +3,13 @@ package main
 import (
 	"fmt"
 	"sync"
+
+	"github.com/aayustark007/concurrent_ds_and_algo/queue"
 )
 
 func main() {
 	// Q := NewNonBlockingQueue[interface{}]()
-	Q := NewBlockingQueue[interface{}]()
+	Q := queue.NewBlockingQueue[interface{}]()
 
 	var wg sync.WaitGroup
 
@@ -15,7 +17,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 
-		Q.Enqueue(NewNode[int]())
+		Q.Enqueue(queue.NewNode[int]())
 		Q.Enqueue(2)
 		Q.Enqueue("ef")
 		Q.Enqueue(4)
